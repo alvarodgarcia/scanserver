@@ -1141,7 +1141,7 @@ async function resetPassword(
 
     const password =
         prompt(
-            "Nueva contraseña (mínimo 8 caracteres):"
+            "Nueva contraseña (mínimo 12 caracteres):"
         );
 
     if (!password)
