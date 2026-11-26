@@ -83,4 +83,4 @@ El rollback **no elimina ni restaura automáticamente SQLite**, para no perder u
 - Los clientes HTTP externos que escriban directamente en `/api/` sin cabecera `Origin` o `Referer` compatible recibirán HTTP 403. La interfaz normal del navegador envía el `Origin` correspondiente.
 - Este parche no modifica reglas de red, cortafuegos ni abre acceso desde Internet. **Solo LAN.**
 
-> Los scripts del parche se distribuyen como paquete descargable en la conversación de revisión; no se ha desplegado aún en ningún servidor.
+> Los scripts versionados están disponibles en [`scripts/apply_v0.1.1.sh`](../scripts/apply_v0.1.1.sh) y [`scripts/rollback_v0.1.1.sh`](../scripts/rollback_v0.1.1.sh). No se ha desplegado aún en ningún servidor.
