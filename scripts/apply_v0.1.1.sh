@@ -50,9 +50,9 @@ Uso (como root):
   bash apply_v0.1.1.sh --check-only [--service scanserver-web.service]
   bash apply_v0.1.1.sh [--service scanserver-web.service] [--health-url http://127.0.0.1:8080/api/me] [--archive /root/scanserver-commit.tar.gz]
 
-No se instalará nada si hay sesiones de escaneo pendientes o si las variables
-SCANSERVER_SECRET (32+ caracteres), SCANSERVER_SANE_DEVICE y
-SCANSERVER_SCANNER_STATUS_URL no están presentes en el servicio en ejecución.
+No se instalará nada si hay sesiones de escaneo pendientes o si el servicio
+no tiene SCANSERVER_SECRET (32+ caracteres) configurado. El parche conserva
+los scripts actuales del escáner y no modifica su parametrización SANE.
 El archivo --archive permite instalar sin Internet en el LXC, pero debe
 proceder del commit fijado; los 3 blobs se verifican antes de cualquier cambio.
 HELP
