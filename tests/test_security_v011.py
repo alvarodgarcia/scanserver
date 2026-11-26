@@ -48,7 +48,7 @@ def isolated_functions(*names, extra=None):
 class SameOriginTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.guard = isolated_functions("same_origin_writes")["same_origin_writes"]
+        cls.guard = staticmethod(isolated_functions("same_origin_writes")["same_origin_writes"])
 
     def req(self, method="POST", origin="http://scan.local:8080",
             host="scan.local:8080", fetch_site="same-origin"):
