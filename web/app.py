@@ -400,12 +400,13 @@ def create_user_storage(username):
         exist_ok=True
     )
 
-    (
-        root /
-        "Documentos"
-    ).mkdir(
-        exist_ok=True
-    )
+    documents = root / "Documentos"
+    documents.mkdir(exist_ok=True)
+
+    # El helper SMB crea previamente el usuario del sistema.
+    for folder in (root, documents):
+        shutil.chown(folder, user=username, group=username)
+        os.chmod(folder, 0o770)
 
 
 def smb_account(
@@ -439,7 +440,7 @@ def smb_account(
 
         raise HTTPException(
             500,
-            f"Error gestionando SMB: {exc}"
+            "No se pudo completar la operación SMB"
         )
 
     if result.returncode != 0:
@@ -452,7 +453,7 @@ def smb_account(
 
         raise HTTPException(
             500,
-            f"Error gestionando SMB: {message}"
+            "No se pudo completar la operación SMB"
         )
 
 
@@ -2014,104 +2015,51 @@ def duplex_info(request: Request):
 
 
 @app.post("/api/session/duplex/even")
-def duplex_start_even(
-    request: Request,
-):
-
+def duplex_start_even(request: Request):
     user = require_user(request)
     session = require_owned_session(user)
-
     directory = session["session_dir"]
 
-    if not (
-        directory /
-        ".duplex_enabled"
-    ).exists():
-
-        raise HTTPException(
-            409,
-            "Esta sesión no está en modo doble cara"
-        )
-
     with lock:
-
+        if current_session is not session:
+            raise HTTPException(409, "La sesión de escaneo ha cambiado")
+        if not (directory / ".duplex_enabled").exists():
+            raise HTTPException(409, "Esta sesión no está en modo doble cara")
         if status["running"]:
-
-            raise HTTPException(
-                409,
-                "Hay un escaneo en curso"
-            )
-
+            raise HTTPException(409, "Hay un escaneo en curso")
         if status["phase"] != "waiting_more":
+            raise HTTPException(409, "Todavía no se puede iniciar la segunda cara")
 
-            raise HTTPException(
-                409,
-                "Todavía no se puede iniciar la segunda cara"
-            )
+        split_file = directory / ".duplex_split"
+        if split_file.exists():
+            raise HTTPException(409, "Ya estás escaneando las caras pares")
 
-    split_file = (
-        directory /
-        ".duplex_split"
-    )
+        odd_pages = count_pages(directory)
+        if odd_pages <= 0:
+            raise HTTPException(409, "Todavía no se ha escaneado ninguna cara impar")
 
-    if split_file.exists():
+        # Transición atómica: no puede intercalarse con /session/add.
+        split_file.write_text(f"{odd_pages}\n")
+        (directory / ".duplex_reverse_even").write_text("1\n")
+        session["duplex_side"] = "even"
+        status.update({
+            "running": True,
+            "phase": "starting",
+            "message": "Preparando escaneo de caras pares",
+            "phase_progress": 0,
+            "indeterminate": True,
+            "duplex": True,
+            "duplex_side": "even",
+            "eta_seconds": None,
+        })
 
-        raise HTTPException(
-            409,
-            "Ya estás escaneando las caras pares"
-        )
-
-    odd_pages = count_pages(
-        directory
-    )
-
-    if odd_pages <= 0:
-
-        raise HTTPException(
-            409,
-            "Todavía no se ha escaneado ninguna cara impar"
-        )
-
-    split_file.write_text(
-        f"{odd_pages}\n"
-    )
-
-    (
-        directory /
-        ".duplex_reverse_even"
-    ).write_text(
-        "1\n"
-    )
-
-    session["duplex_side"] = "even"
-
-    update_status(
-        running=True,
-        phase="starting",
-        message=(
-            "Preparando escaneo de caras pares"
-        ),
-        phase_progress=0,
-        indeterminate=True,
-        duplex=True,
-        duplex_side="even",
-        eta_seconds=None,
-    )
-
-    # Al pulsar "Pasar a caras pares"
-    # empieza directamente la segunda pasada.
-    threading.Thread(
-        target=scan_worker,
-        daemon=True,
-    ).start()
-
+    threading.Thread(target=scan_worker, daemon=True).start()
     return {
         "ok": True,
         "side": "even",
         "odd_pages": odd_pages,
         "reverse_even": True,
     }
-
 
 
 @app.post("/api/session/finalize")
@@ -2235,45 +2183,27 @@ def finalize_session(
 
 
 @app.post("/api/session/cancel")
-def cancel_session(
-    request: Request
-):
-
+def cancel_session(request: Request):
     global current_session
     global status
 
-    user = require_user(
-        request
-    )
-
-    session = (
-        require_owned_session(
-            user
-        )
-    )
+    user = require_user(request)
+    session = require_owned_session(user)
 
     with lock:
-
+        if current_session is not session:
+            raise HTTPException(409, "La sesión de escaneo ha cambiado")
         if status["running"]:
-
             raise HTTPException(
-                409,
-                "No se puede cancelar mientras se está procesando"
+                409, "No se puede cancelar mientras se está procesando"
             )
 
-    shutil.rmtree(
-        session["session_dir"],
-        ignore_errors=True
-    )
-
-    current_session = None
-
-    with lock:
+        # Invalidación atómica frente a /session/add y /session/start.
+        current_session = None
         status = initial_status()
 
-    return {
-        "ok": True
-    }
+    shutil.rmtree(session["session_dir"], ignore_errors=True)
+    return {"ok": True}
 
 
 # ============================================================
