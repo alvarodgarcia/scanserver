@@ -89,6 +89,10 @@ Run only on a private network. The source can be started via Uvicorn **after** p
 
 See [CHANGELOG.md](CHANGELOG.md) and [roadmap](docs/ROADMAP.md).
 
+## Upgrade patches
+
+The guarded [v0.1.1 LXC patch and rollback guide](docs/PATCH_v0.1.1.md) checks the exact audited baseline, preserves the SQLite database and private documents, and refuses deployment if scans are unfinished. This is a **candidate**; do not deploy during active scanning.
+
 ## Security and privacy
 
 The `feature/v0.1.1-security-stability` branch hardens authentication, changes session version handling, and starts duplex atomically. These changes require **re-login after upgrade** and have not been verified against real scanner/Samba hardware. Do not treat the branch as a drop-in upgrade until staged tests pass.
