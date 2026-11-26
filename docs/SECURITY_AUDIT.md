@@ -29,3 +29,17 @@
 - Do not include `security.py` from the original backup, `.env`, databases, scanner IPs, backups or logs.
 - Restrict ports 8080 and 445 to trusted networks, not WAN.
 - Choose a license before publishing if the project is to be open source.
+
+
+## v0.1.1 development candidate update
+
+These changes are **on a development branch**, not the released v0.1.0 baseline:
+
+- [Implemented in source] Request origin verification for every mutating API endpoint.
+- [Implemented in source] IP-based login throttling; in-memory only.
+- [Implemented in source] Session-version migration and revocation on password/status change.
+- [Implemented in source] Atomic scanner start, odd/even transition and cancellation.
+- [Implemented in source] Restricted new account directories and redacted SMB helper errors.
+- [Added] Isolated tests that do not connect to real scanners or user records.
+
+**Still outstanding:** rate limiting across multiple workers, runtime-origin compatibility checks for supported browsers, end-to-end scanner/Samba authorization tests, symlink race defense, and live deployment audit. No security certification is claimed.
