@@ -11,13 +11,13 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel
@@ -99,8 +99,103 @@ app.add_middleware(
 )
 
 
+# Los formularios y llamadas API de la web deben proceder de su propio origen.
+# La interfaz usa fetch desde la misma dirección: http://IP_LAN:8080.
+@app.middleware("http")
+async def same_origin_writes(request: Request, call_next):
+    if (
+        request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and request.url.path.startswith("/api/")
+    ):
+        fetch_site = request.headers.get("sec-fetch-site", "").lower()
+        if fetch_site == "cross-site":
+            return JSONResponse(
+                {"detail": "Origen no permitido"}, status_code=403
+            )
+        host = request.headers.get("host", "")
+        expected = f"{request.url.scheme}://{host}"
+        origin = request.headers.get("origin")
+        referer = request.headers.get("referer")
+
+        if origin:
+            allowed = origin.rstrip("/") == expected
+        elif referer:
+            parsed = urlsplit(referer)
+            allowed = f"{parsed.scheme}://{parsed.netloc}" == expected
+        else:
+            allowed = False
+
+        if not allowed:
+            return JSONResponse(
+                {"detail": "Origen no permitido"}, status_code=403
+            )
+
+    return await call_next(request)
+
 
 PASSWORD_HASHER = PasswordHasher()
+
+
+# Limita intentos de login por IP dentro de este proceso (LAN, 1 worker).
+# Para despliegues multiproceso se requiere un backend de límites compartido.
+LOGIN_WINDOW_SECONDS = 300
+LOGIN_MAX_FAILURES = 8
+LOGIN_BLOCK_SECONDS = 300
+_login_attempts = {}
+_login_lock = threading.Lock()
+
+
+def _login_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def check_login_rate(request: Request):
+    key = _login_ip(request)
+    now = time.monotonic()
+    with _login_lock:
+        state = _login_attempts.get(key)
+        if not state:
+            return
+        if state["blocked_until"] > now:
+            raise HTTPException(
+                status_code=429,
+                detail="Demasiados intentos. Inténtalo más tarde.",
+                headers={"Retry-After": str(LOGIN_BLOCK_SECONDS)},
+            )
+        state["failures"] = [
+            t for t in state["failures"]
+            if now - t < LOGIN_WINDOW_SECONDS
+        ]
+        if not state["failures"]:
+            _login_attempts.pop(key, None)
+
+
+def record_login_failure(request: Request):
+    key = _login_ip(request)
+    now = time.monotonic()
+    with _login_lock:
+        state = _login_attempts.setdefault(
+            key, {"failures": [], "blocked_until": 0.0}
+        )
+        state["failures"] = [
+            t for t in state["failures"]
+            if now - t < LOGIN_WINDOW_SECONDS
+        ]
+        state["failures"].append(now)
+        if len(state["failures"]) >= LOGIN_MAX_FAILURES:
+            state["blocked_until"] = now + LOGIN_BLOCK_SECONDS
+        # Limitar memoria ante un gran número de IPs distintas.
+        if len(_login_attempts) > 2048:
+            for ip, entry in list(_login_attempts.items()):
+                if entry["blocked_until"] < now and not entry["failures"]:
+                    _login_attempts.pop(ip, None)
+            if len(_login_attempts) > 2048:
+                _login_attempts.pop(next(iter(_login_attempts)))
+
+
+def clear_login_failures(request: Request):
+    with _login_lock:
+        _login_attempts.pop(_login_ip(request), None)
 
 
 # ============================================================
@@ -140,10 +235,22 @@ def init_db():
                 password_hash TEXT NOT NULL,
                 is_admin INTEGER NOT NULL DEFAULT 0,
                 enabled INTEGER NOT NULL DEFAULT 1,
+                session_version INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )
             """
         )
+
+        # Migración no destructiva: conserva usuarios y contraseñas existentes.
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(users)").fetchall()
+        }
+        if "session_version" not in columns:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN session_version "
+                "INTEGER NOT NULL DEFAULT 0"
+            )
 
         conn.commit()
 
@@ -227,6 +334,15 @@ def require_user(request: Request):
             detail="Sesión no válida"
         )
 
+    # Las cookies anteriores al despliegue requieren nuevo login.
+    # Las sesiones previas dejan de valer al cambiar clave o estado.
+    if request.session.get("session_version") != user["session_version"]:
+        request.session.clear()
+        raise HTTPException(
+            status_code=401,
+            detail="Sesión caducada; inicia sesión de nuevo",
+        )
+
     return user
 
 
@@ -284,12 +400,13 @@ def create_user_storage(username):
         exist_ok=True
     )
 
-    (
-        root /
-        "Documentos"
-    ).mkdir(
-        exist_ok=True
-    )
+    documents = root / "Documentos"
+    documents.mkdir(exist_ok=True)
+
+    # El helper SMB crea previamente el usuario del sistema.
+    for folder in (root, documents):
+        shutil.chown(folder, user=username, group=username)
+        os.chmod(folder, 0o770)
 
 
 def smb_account(
@@ -323,7 +440,7 @@ def smb_account(
 
         raise HTTPException(
             500,
-            f"Error gestionando SMB: {exc}"
+            "No se pudo completar la operación SMB"
         )
 
     if result.returncode != 0:
@@ -336,7 +453,7 @@ def smb_account(
 
         raise HTTPException(
             500,
-            f"Error gestionando SMB: {message}"
+            "No se pudo completar la operación SMB"
         )
 
 
@@ -664,6 +781,9 @@ class ScanRequest(BaseModel):
     ] = 300
 
     ocr: bool = True
+
+    # Se decide de forma atómica con el inicio del escaneo.
+    duplex: bool = False
 
 
 class FolderCreateRequest(BaseModel):
@@ -1383,46 +1503,27 @@ def login(
     request: Request,
     data: LoginRequest
 ):
+    check_login_rate(request)
 
-    user = user_by_username(
-        data.username
-    )
-
-    if (
-        not user
-        or not user["enabled"]
-    ):
-
-        raise HTTPException(
-            401,
-            "Usuario o contraseña incorrectos"
-        )
+    user = user_by_username(data.username)
+    if not user or not user["enabled"]:
+        record_login_failure(request)
+        raise HTTPException(401, "Usuario o contraseña incorrectos")
 
     try:
-
-        PASSWORD_HASHER.verify(
-            user["password_hash"],
-            data.password
-        )
-
+        PASSWORD_HASHER.verify(user["password_hash"], data.password)
     except VerifyMismatchError:
+        record_login_failure(request)
+        raise HTTPException(401, "Usuario o contraseña incorrectos")
 
-        raise HTTPException(
-            401,
-            "Usuario o contraseña incorrectos"
-        )
-
+    clear_login_failures(request)
     request.session.clear()
-
-    request.session[
-        "user_id"
-    ] = user["id"]
+    request.session["user_id"] = user["id"]
+    request.session["session_version"] = user["session_version"]
 
     return {
         "ok": True,
-        "user": public_user(
-            user
-        )
+        "user": public_user(user)
     }
 
 
@@ -1659,131 +1760,71 @@ def start_session(
     request: Request,
     data: ScanRequest
 ):
-
     global current_session
 
-    user = require_user(
-        request
+    user = require_user(request)
+    root = user_root(user)
+    destination_folder = safe_user_path(
+        root, data.folder, must_exist=True
     )
-
-    with lock:
-
-        if status["running"]:
-
-            raise HTTPException(
-                409,
-                "El escáner está ocupado"
-            )
-
-        if (
-            status["phase"]
-            == "waiting_more"
-        ):
-
-            raise HTTPException(
-                409,
-                "Hay un documento pendiente de finalizar"
-            )
-
-    root = user_root(
-        user
-    )
-
-    destination_folder = (
-        safe_user_path(
-            root,
-            data.folder,
-            must_exist=True
-        )
-    )
-
     if not destination_folder.is_dir():
+        raise HTTPException(400, "El destino no es una carpeta")
+    name = sanitize_filename(data.name)
 
-        raise HTTPException(
-            400,
-            "El destino no es una carpeta"
-        )
+    # Reserva exclusiva del escáner: no dejar ningún hueco entre
+    # comprobar disponibilidad y asignar current_session/status.
+    with lock:
+        if status["running"] or current_session is not None:
+            raise HTTPException(409, "El escáner está ocupado")
 
-    name = sanitize_filename(
-        data.name
-    )
+        destination = unique_destination(destination_folder, name)
+        session_id = uuid.uuid4().hex
+        session_directory = SESSIONS_ROOT / session_id
+        session_directory.mkdir(parents=True, mode=0o700)
 
-    destination = (
-        unique_destination(
-            destination_folder,
-            name
-        )
-    )
+        try:
+            if data.duplex:
+                (session_directory / ".duplex_enabled").write_text("1\n")
+        except Exception:
+            shutil.rmtree(session_directory, ignore_errors=True)
+            raise
 
-    session_id = (
-        uuid.uuid4().hex
-    )
+        current_session = {
+            "id": session_id,
+            "owner_id": user["id"],
+            "username": user["username"],
+            "session_dir": session_directory,
+            "destination": destination,
+            "folder": data.folder,
+            "mode": data.mode,
+            "dpi": data.dpi,
+            "ocr": data.ocr,
+            "duplex_side": "odd" if data.duplex else None,
+        }
 
-    session_directory = (
-        SESSIONS_ROOT /
-        session_id
-    )
+        status.update({
+            "owner_id": user["id"],
+            "running": True,
+            "phase": "starting",
+            "message": "Iniciando escaneo",
+            "phase_progress": 0,
+            "indeterminate": True,
+            "pages": 0,
+            "current_page": None,
+            "filename": destination.name,
+            "folder": data.folder,
+            "last_file": None,
+            "mode": data.mode,
+            "dpi": data.dpi,
+            "ocr": data.ocr,
+            "duplex": data.duplex,
+            "duplex_side": "odd" if data.duplex else None,
+            "eta_seconds": None,
+        })
 
-    session_directory.mkdir(
-        parents=True
-    )
+    threading.Thread(target=scan_worker, daemon=True).start()
 
-    current_session = {
-        "id": session_id,
-
-        "owner_id":
-            user["id"],
-
-        "username":
-            user["username"],
-
-        "session_dir":
-            session_directory,
-
-        "destination":
-            destination,
-
-        "folder":
-            data.folder,
-
-        "mode":
-            data.mode,
-
-        "dpi":
-            data.dpi,
-
-        "ocr":
-            data.ocr,
-    }
-
-    update_status(
-        owner_id=user["id"],
-        running=True,
-        phase="starting",
-        message="Iniciando escaneo",
-        phase_progress=0,
-        indeterminate=True,
-        pages=0,
-        current_page=None,
-        filename=destination.name,
-        folder=data.folder,
-        last_file=None,
-        mode=data.mode,
-        dpi=data.dpi,
-        ocr=data.ocr,
-        eta_seconds=None,
-    )
-
-    threading.Thread(
-        target=scan_worker,
-        daemon=True,
-    ).start()
-
-    return {
-        "ok": True,
-        "filename":
-            destination.name
-    }
+    return {"ok": True, "filename": destination.name}
 
 
 @app.post("/api/session/add")
@@ -1974,104 +2015,51 @@ def duplex_info(request: Request):
 
 
 @app.post("/api/session/duplex/even")
-def duplex_start_even(
-    request: Request,
-):
-
+def duplex_start_even(request: Request):
     user = require_user(request)
     session = require_owned_session(user)
-
     directory = session["session_dir"]
 
-    if not (
-        directory /
-        ".duplex_enabled"
-    ).exists():
-
-        raise HTTPException(
-            409,
-            "Esta sesión no está en modo doble cara"
-        )
-
     with lock:
-
+        if current_session is not session:
+            raise HTTPException(409, "La sesión de escaneo ha cambiado")
+        if not (directory / ".duplex_enabled").exists():
+            raise HTTPException(409, "Esta sesión no está en modo doble cara")
         if status["running"]:
-
-            raise HTTPException(
-                409,
-                "Hay un escaneo en curso"
-            )
-
+            raise HTTPException(409, "Hay un escaneo en curso")
         if status["phase"] != "waiting_more":
+            raise HTTPException(409, "Todavía no se puede iniciar la segunda cara")
 
-            raise HTTPException(
-                409,
-                "Todavía no se puede iniciar la segunda cara"
-            )
+        split_file = directory / ".duplex_split"
+        if split_file.exists():
+            raise HTTPException(409, "Ya estás escaneando las caras pares")
 
-    split_file = (
-        directory /
-        ".duplex_split"
-    )
+        odd_pages = count_pages(directory)
+        if odd_pages <= 0:
+            raise HTTPException(409, "Todavía no se ha escaneado ninguna cara impar")
 
-    if split_file.exists():
+        # Transición atómica: no puede intercalarse con /session/add.
+        split_file.write_text(f"{odd_pages}\n")
+        (directory / ".duplex_reverse_even").write_text("1\n")
+        session["duplex_side"] = "even"
+        status.update({
+            "running": True,
+            "phase": "starting",
+            "message": "Preparando escaneo de caras pares",
+            "phase_progress": 0,
+            "indeterminate": True,
+            "duplex": True,
+            "duplex_side": "even",
+            "eta_seconds": None,
+        })
 
-        raise HTTPException(
-            409,
-            "Ya estás escaneando las caras pares"
-        )
-
-    odd_pages = count_pages(
-        directory
-    )
-
-    if odd_pages <= 0:
-
-        raise HTTPException(
-            409,
-            "Todavía no se ha escaneado ninguna cara impar"
-        )
-
-    split_file.write_text(
-        f"{odd_pages}\n"
-    )
-
-    (
-        directory /
-        ".duplex_reverse_even"
-    ).write_text(
-        "1\n"
-    )
-
-    session["duplex_side"] = "even"
-
-    update_status(
-        running=True,
-        phase="starting",
-        message=(
-            "Preparando escaneo de caras pares"
-        ),
-        phase_progress=0,
-        indeterminate=True,
-        duplex=True,
-        duplex_side="even",
-        eta_seconds=None,
-    )
-
-    # Al pulsar "Pasar a caras pares"
-    # empieza directamente la segunda pasada.
-    threading.Thread(
-        target=scan_worker,
-        daemon=True,
-    ).start()
-
+    threading.Thread(target=scan_worker, daemon=True).start()
     return {
         "ok": True,
         "side": "even",
         "odd_pages": odd_pages,
         "reverse_even": True,
     }
-
 
 
 @app.post("/api/session/finalize")
@@ -2195,45 +2183,27 @@ def finalize_session(
 
 
 @app.post("/api/session/cancel")
-def cancel_session(
-    request: Request
-):
-
+def cancel_session(request: Request):
     global current_session
     global status
 
-    user = require_user(
-        request
-    )
-
-    session = (
-        require_owned_session(
-            user
-        )
-    )
+    user = require_user(request)
+    session = require_owned_session(user)
 
     with lock:
-
+        if current_session is not session:
+            raise HTTPException(409, "La sesión de escaneo ha cambiado")
         if status["running"]:
-
             raise HTTPException(
-                409,
-                "No se puede cancelar mientras se está procesando"
+                409, "No se puede cancelar mientras se está procesando"
             )
 
-    shutil.rmtree(
-        session["session_dir"],
-        ignore_errors=True
-    )
-
-    current_session = None
-
-    with lock:
+        # Invalidación atómica frente a /session/add y /session/start.
+        current_session = None
         status = initial_status()
 
-    return {
-        "ok": True
-    }
+    shutil.rmtree(session["session_dir"], ignore_errors=True)
+    return {"ok": True}
 
 
 # ============================================================
@@ -2518,7 +2488,7 @@ def admin_change_password(
         conn.execute(
             """
             UPDATE users
-            SET password_hash = ?
+            SET password_hash = ?, session_version = session_version + 1
             WHERE id = ?
             """,
             (
@@ -2588,7 +2558,7 @@ def admin_enable_user(
         conn.execute(
             """
             UPDATE users
-            SET enabled = ?
+            SET enabled = ?, session_version = session_version + 1
             WHERE id = ?
             """,
             (

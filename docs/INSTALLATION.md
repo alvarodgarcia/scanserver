@@ -63,6 +63,14 @@ set +a
 
 Use a trusted LAN bind and firewall rule for remote local clients. Do not port-forward 8080 or SMB.
 
+## v0.1.1 candidate upgrade cautions
+
+- **Do not deploy over an active scan**: state is in memory and an unfinished session can be stranded by a restart.
+- SQLite migration adds a `session_version` column; it preserves rows and Argon2 hashes. Existing browser cookies need a new login.
+- Same-origin protection expects browser API writes from the exact LAN address used to open the UI (scheme, hostname and port). Do not use a cross-origin iframe or an external web client without reviewing this policy.
+- Login throttling is per Uvicorn process (single-worker LAN deployment).
+- Physical scanner, SMB helper and role-permission tests are still required; this source snapshot is not an automatic upgrade package.
+
 ## Safe upgrade of an existing installation
 
 1. **Complete and finalize all running scans first.** Scan session state is in memory and restarts can strand unfinished jobs.
