@@ -2,7 +2,7 @@
 
 **ScanServer** is a self-hosted local-network document scanning web application for an eSCL/SANE scanner with an automatic document feeder (ADF). It provides user accounts, per-user folders, PDF creation, optional OCR and a browser interface suitable for desktop and mobile.
 
-**Initial baseline:** `v0.1.0` · **Scope:** LAN only · **Maturity:** source snapshot; installation requires manual prerequisites and a Samba helper.
+**Initial baseline:** `v0.1.0` · **Development candidate:** `v0.1.1` · **Scope:** LAN only · **Maturity:** source snapshot; installation requires manual prerequisites and a Samba helper.
 
 > Public GitHub repository ≠ public web service. Do **not** expose the scanner, SMB, or the ScanServer API directly to the Internet.
 
@@ -90,6 +90,9 @@ Run only on a private network. The source can be started via Uvicorn **after** p
 See [CHANGELOG.md](CHANGELOG.md) and [roadmap](docs/ROADMAP.md).
 
 ## Security and privacy
+
+The `feature/v0.1.1-security-stability` branch hardens authentication, changes session version handling, and starts duplex atomically. These changes require **re-login after upgrade** and have not been verified against real scanner/Samba hardware. Do not treat the branch as a drop-in upgrade until staged tests pass.
+
 
 - No real credentials or real user documents belong in this repository.
 - The session secret is mandatory; there is no insecure default.
