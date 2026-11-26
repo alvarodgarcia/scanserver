@@ -5,11 +5,31 @@ All notable changes to ScanServer are documented here. Versioning follows SemVer
 ## [Unreleased]
 
 ### Planned
-- Server-side document pagination and filters.
-- Persistent scan sessions across service restarts.
-- Security middleware for local authentication throttling and origin checks.
-- Standalone installation automation, including the Samba user helper.
-- Automated scanner-free integration tests.
+- Real backend pagination and persistent scan sessions (v0.2.0).
+- Reproducible LXC installer with audited Samba helper.
+- Hardware/Samba integration tests.
+
+## [0.1.1] - Unreleased (candidate)
+
+### Security
+- Require same-origin Origin/Referer on all API writes; reject cross-site fetch metadata.
+- Limit failed logins per IP (8 within 5 minutes, 5-minute lockout; per-process).
+- Add session_version migration; password changes and account state changes revoke prior sessions.
+- Limit new user directory permissions to owner/group; stop returning privileged SMB helper error text.
+
+### Stability
+- Reserve the physical scanner and session status together under one lock.
+- Make duplex odd-to-even transition and cancel operations atomic.
+- Send duplex mode in the initial scan request instead of intercepting global window.fetch.
+- Make automatic backside reversal explicit and disable the ineffective reverse checkbox.
+
+### Tests
+- Add isolated checks for origin validation, login throttle, DB migration and atomic scan start.
+
+### Deployment notes
+- Existing users must sign in again when upgrading to this version.
+- No changes applied to the active LXC; validate first in a test environment.
+- Release remains a draft candidate until real ADF, OCR, duplex and Samba smoke tests are complete.
 
 ## [0.1.0] - 2026-11-26
 
