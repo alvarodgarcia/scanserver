@@ -1,0 +1,23 @@
+name: Static checks
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compile Python files
+        run: python -m compileall -q web/app.py ocr_progress.py tests
+      - name: Validate shell syntax
+        run: bash -n scan.sh scan_batch.sh finalize.sh
+      - name: Validate JavaScript syntax
+        run: node --check web/static/app.js
+      - name: Source checks
+        run: python -m unittest discover -s tests -v
