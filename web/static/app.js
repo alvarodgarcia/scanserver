@@ -407,7 +407,11 @@ async function startScan() {
             document
             .getElementById(
                 "ocr"
-            ).checked
+            ).checked,
+
+        // El servidor registra el modo dúplex antes de iniciar el ADF.
+        duplex:
+            document.getElementById("duplex-enabled")?.checked === true
     };
 
     const response =
@@ -1367,28 +1371,6 @@ document
     let duplexInfo = null;
 
 
-    function endpoint(input) {
-
-        try {
-
-            const raw =
-                typeof input === "string"
-                    ? input
-                    : input.url;
-
-            return new URL(
-                raw,
-                window.location.href
-            ).pathname;
-
-        } catch (_) {
-
-            return "";
-
-        }
-    }
-
-
     function findButton(regex) {
 
         return [
@@ -1491,14 +1473,15 @@ document
                         type="checkbox"
                         id="duplex-reverse"
                         checked
+                        disabled
                         style="
                             margin-top:2px;
                         "
                     >
 
                     <span>
-                        Invertir automáticamente el orden
-                        de las caras pares
+                        El orden de las caras pares se invierte
+                        automáticamente
                     </span>
                 </label>
 
@@ -1590,11 +1573,6 @@ document
 
     async function startEvenPass() {
 
-        const reverse =
-            document.getElementById(
-                "duplex-reverse"
-            ).checked;
-
         const ok = window.confirm(
             "Gira ahora TODO el taco como un bloque " +
             "y colócalo de nuevo en el alimentador.\n\n" +
@@ -1608,9 +1586,7 @@ document
 
         const response =
             await nativeFetch(
-                "/api/session/duplex/even" +
-                "?reverse=" +
-                (reverse ? "true" : "false"),
+                "/api/session/duplex/even",
                 {
                     method: "POST"
                 }
@@ -1635,28 +1611,6 @@ document
 
             alert(message);
             return;
-        }
-
-        await refreshDuplexInfo();
-    }
-
-
-    async function enableDuplex() {
-
-        const response =
-            await nativeFetch(
-                "/api/session/duplex/enable",
-                {
-                    method: "POST"
-                }
-            );
-
-        if (!response.ok) {
-
-            console.error(
-                "No se pudo activar " +
-                "el modo dúplex"
-            );
         }
 
         await refreshDuplexInfo();
@@ -1750,8 +1704,8 @@ document
                 duplexInfo.reverse_even
                 !== false;
 
-            reverse.disabled =
-                duplexInfo.side === "even";
+            // La segunda pasada se invierte siempre.
+            reverse.disabled = true;
 
 
             if (
@@ -1821,82 +1775,6 @@ document
             }
         }
     }
-
-
-    /*
-     * Interceptamos únicamente el inicio de
-     * una sesión para activar dúplex si
-     * estaba marcada la casilla.
-     *
-     * No se modifica el JSON actual de ScanRequest.
-     */
-    window.fetch =
-        async function(
-            input,
-            init = {}
-        ) {
-
-            const path =
-                endpoint(input);
-
-            const method =
-                (
-                    init.method ||
-                    (
-                        input instanceof Request
-                            ? input.method
-                            : "GET"
-                    )
-                ).toUpperCase();
-
-            const response =
-                await nativeFetch(
-                    input,
-                    init
-                );
-
-
-            if (
-                path ===
-                    "/api/session/start"
-                &&
-                method === "POST"
-                &&
-                response.ok
-            ) {
-
-                const checkbox =
-                    document.getElementById(
-                        "duplex-enabled"
-                    );
-
-                if (
-                    checkbox &&
-                    checkbox.checked
-                ) {
-
-                    setTimeout(
-                        enableDuplex,
-                        50
-                    );
-                }
-            }
-
-
-            if (
-                path === "/api/status"
-                &&
-                response.ok
-            ) {
-
-                setTimeout(
-                    refreshDuplexInfo,
-                    0
-                );
-            }
-
-            return response;
-        };
 
 
     function initDuplex() {
