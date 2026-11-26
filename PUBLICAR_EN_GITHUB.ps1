@@ -1,6 +1,6 @@
-# ScanServer v0.1.0 - publicación completa y segura en GitHub.
+# ScanServer v0.1.0 - publicaciÃ³n completa y segura en GitHub.
 # Ejecutar desde Windows, DESPUES de extraer todo el ZIP.
-# Necesita Git for Windows y GitHub CLI (gh). No incorpora contraseñas ni tokens.
+# Necesita Git for Windows y GitHub CLI (gh). No incorpora contraseÃ±as ni tokens.
 
 $ErrorActionPreference = 'Stop'
 $repo = 'alvarodgarcia/scanserver'
@@ -13,7 +13,7 @@ $target = Join-Path $temp 'repository'
 
 function Assert-Exit([string]$operation) {
     if ($LASTEXITCODE -ne 0) {
-        throw "$operation ha fallado (código $LASTEXITCODE). No se realizará un push forzado."
+        throw "$operation ha fallado (cÃ³digo $LASTEXITCODE). No se realizarÃ¡ un push forzado."
     }
 }
 
@@ -32,17 +32,17 @@ foreach ($required in @('VERSION', 'web/app.py', 'web/static/app.js', 'web/stati
 }
 
 if ((Get-Content (Join-Path $source 'VERSION') -Raw).Trim() -ne '0.1.0') {
-    throw 'El paquete no corresponde a la versión v0.1.0.'
+    throw 'El paquete no corresponde a la versiÃ³n v0.1.0.'
 }
 
 & gh auth status 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host 'Abriendo autenticación con GitHub...' -ForegroundColor Yellow
+    Write-Host 'Abriendo autenticaciÃ³n con GitHub...' -ForegroundColor Yellow
     & gh auth login --hostname github.com --web --git-protocol https
-    Assert-Exit 'Autenticación'
+    Assert-Exit 'AutenticaciÃ³n'
 }
 & gh auth setup-git
-Assert-Exit 'Configuración de GitHub CLI'
+Assert-Exit 'ConfiguraciÃ³n de GitHub CLI'
 $login = (& gh api user --jq .login).Trim()
 Assert-Exit 'Identificar usuario'
 if ($login -ne 'alvarodgarcia') { throw "La cuenta conectada es '$login', no 'alvarodgarcia'." }
@@ -115,25 +115,25 @@ try {
         & git -C $target push origin main
         Assert-Exit 'Publicar rama main'
     } else {
-        Write-Host 'Código y documentación ya publicados; no hay diferencias.'
+        Write-Host 'CÃ³digo y documentaciÃ³n ya publicados; no hay diferencias.'
     }
 
-    # El tag solamente se publica después del push del contenido completo.
+    # El tag solamente se publica despuÃ©s del push del contenido completo.
     & git -C $target fetch origin --tags
     Assert-Exit 'Consultar etiquetas'
-    $tag = (& git -C $target tag --list 'v0.1.0').Trim()
+    $tag = (@(& git -C $target tag --list 'v0.1.0') -join "").Trim()
     if (-not $tag) {
         & git -C $target tag -a v0.1.0 -m 'ScanServer v0.1.0 - Initial LAN-only source release'
         Assert-Exit 'Crear etiqueta'
         & git -C $target push origin v0.1.0
         Assert-Exit 'Publicar etiqueta'
     } else {
-        Write-Host 'La etiqueta v0.1.0 ya existe; no se modificará.' -ForegroundColor Yellow
+        Write-Host 'La etiqueta v0.1.0 ya existe; no se modificarÃ¡.' -ForegroundColor Yellow
     }
 
-    # Esta operación requiere permiso de administración del repositorio.
+    # Esta operaciÃ³n requiere permiso de administraciÃ³n del repositorio.
     & gh repo edit $repo --description $description --add-topic $topics
-    Assert-Exit 'Guardar descripción y temas'
+    Assert-Exit 'Guardar descripciÃ³n y temas'
 
     & gh release view v0.1.0 --repo $repo --json tagName --jq .tagName 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
