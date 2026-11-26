@@ -51,7 +51,7 @@ Desktop / mobile (trusted LAN)
 - Writable `/opt/scanserver/data`, `/srv/scans/usuarios`, `/srv/scans/sessions` and appropriate system users/permissions.
 - A random `SCANSERVER_SECRET`, and environment-specific scanner SANE device/status URL.
 
-Follow [installation and migration notes](docs/INSTALLATION.md) before running the application.
+Follow [installation and migration notes](docs/INSTALLATION.md) before running the application. For Windows-assisted publication to an empty repository, see `PUBLICAR_EN_GITHUB.cmd` / `PUBLICAR_EN_GITHUB.ps1` (requires Git and GitHub CLI and an interactive GitHub login).
 
 ## Quick configuration overview
 

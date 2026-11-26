@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+
+<html lang="es">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,viewport-fit=cover"
+>
+
+<title>ScanServer</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family:
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    background: #f3f5f7;
+    color: #202124;
+}
+
+header {
+    background: #202124;
+    color: white;
+    padding: 18px;
+}
+
+.header-inner {
+    max-width: 900px;
+    margin: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 24px;
+}
+
+.subtitle {
+    opacity: .65;
+    font-size: 12px;
+    margin-top: 3px;
+}
+
+.userbox {
+    text-align: right;
+    font-size: 13px;
+}
+
+.logout {
+    margin-top: 5px;
+    background: transparent;
+    color: white;
+    border: 1px solid #777;
+    padding: 6px 10px;
+}
+
+.container {
+    max-width: 900px;
+    margin: auto;
+    padding: 18px;
+}
+
+.card {
+    background: white;
+    border-radius: 17px;
+    padding: 20px;
+    margin-bottom: 18px;
+    box-shadow:
+        0 2px 10px
+        rgba(0,0,0,.06);
+}
+
+h2 {
+    margin-top: 0;
+}
+
+label {
+    font-size: 13px;
+    color: #666;
+    font-weight: 600;
+}
+
+input,
+select {
+    width: 100%;
+    padding: 13px;
+    border-radius: 11px;
+    border: 1px solid #ddd;
+    background: white;
+    font-size: 16px;
+}
+
+input:disabled,
+select:disabled {
+    background: #f3f3f3;
+}
+
+button {
+    border: 0;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: .45;
+    cursor: default;
+}
+
+.primary {
+    background: #1976d2;
+    color: white;
+}
+
+.success {
+    background: #16834b;
+    color: white;
+}
+
+.secondary {
+    background: #eef2f5;
+    color: #333;
+}
+
+.danger {
+    background: #fff3f3;
+    color: #b3261e;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns:
+        1fr 1fr;
+    gap: 14px;
+}
+
+.full {
+    grid-column: 1 / -1;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.help {
+    font-size: 12px;
+    color: #888;
+}
+
+.ocr-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 18px 0;
+}
+
+.ocr-row input {
+    width: 21px;
+    height: 21px;
+}
+
+.scan-button {
+    width: 100%;
+    padding: 19px;
+    font-size: 18px;
+}
+
+.status-box {
+    margin-top: 20px;
+    background: #f5f7f9;
+    border-radius: 14px;
+    padding: 17px;
+}
+
+.status-title {
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.status-message {
+    color: #666;
+    font-size: 14px;
+    margin-top: 5px;
+}
+
+.status-file {
+    color: #888;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+.progress-track {
+    height: 12px;
+    background: #ddd;
+    border-radius: 20px;
+    overflow: hidden;
+    margin-top: 15px;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0;
+    background: #1976d2;
+    border-radius: 20px;
+    transition: width .25s;
+}
+
+.progress-bar.indeterminate {
+    width: 30%;
+    animation:
+        loading
+        1.2s
+        infinite
+        ease-in-out;
+}
+
+@keyframes loading {
+    0% {
+        transform:
+            translateX(-120%);
+    }
+
+    100% {
+        transform:
+            translateX(430%);
+    }
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 7px;
+    font-size: 12px;
+    color: #777;
+}
+
+.continue-box {
+    display: none;
+    background: #eef6ff;
+    border: 1px solid #d4e8fb;
+    border-radius: 14px;
+    padding: 17px;
+    margin-top: 17px;
+}
+
+.continue-buttons {
+    display: grid;
+    grid-template-columns:
+        1fr 1fr;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.page-total {
+    font-size: 21px;
+    font-weight: 700;
+    margin-top: 10px;
+}
+
+.folder-create {
+    margin-top: 14px;
+    padding: 15px;
+    background: #f7f8f9;
+    border-radius: 13px;
+}
+
+.folder-create-grid {
+    display: grid;
+    grid-template-columns:
+        1fr 1fr auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.document {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 2px;
+    border-bottom: 1px solid #eee;
+}
+
+.document:last-child {
+    border: 0;
+}
+
+.document-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.document-info {
+    color: #777;
+    font-size: 12px;
+    margin-top: 3px;
+}
+
+.download {
+    background: #eef2f5;
+    color: #333;
+    border-radius: 9px;
+    padding: 9px 13px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.login-container {
+    max-width: 430px;
+    margin: 60px auto;
+    padding: 18px;
+}
+
+.login-card {
+    background: white;
+    padding: 28px;
+    border-radius: 18px;
+    box-shadow:
+        0 4px 24px
+        rgba(0,0,0,.08);
+}
+
+.login-card h1 {
+    margin-top: 0;
+}
+
+.login-fields {
+    display: grid;
+    gap: 14px;
+}
+
+.login-button {
+    width: 100%;
+}
+
+.error {
+    color: #b3261e;
+    font-size: 13px;
+    margin-top: 10px;
+}
+
+.admin-user {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.admin-actions {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+}
+
+.admin-create {
+    background: #f7f8f9;
+    padding: 15px;
+    border-radius: 13px;
+    margin-bottom: 18px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+@media(max-width: 600px) {
+
+    .grid,
+    .continue-buttons,
+    .folder-create-grid {
+        grid-template-columns:
+            1fr;
+    }
+
+    .full {
+        grid-column: auto;
+    }
+
+    .container {
+        padding: 12px;
+    }
+
+    .card {
+        padding: 17px;
+    }
+
+    .header-inner {
+        align-items: flex-start;
+    }
+
+    .document {
+        align-items: flex-start;
+    }
+
+    .admin-user {
+        flex-direction: column;
+    }
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<div id="loginView">
+
+<div class="login-container">
+
+<div class="login-card">
+
+<h1>📄 ScanServer</h1>
+
+<p>
+Accede para escanear y consultar
+tus documentos.
+</p>
+
+<div class="login-fields">
+
+<div class="field">
+
+<label>Usuario</label>
+
+<input
+    id="loginUsername"
+    autocomplete="username"
+>
+
+</div>
+
+<div class="field">
+
+<label>Contraseña</label>
+
+<input
+    id="loginPassword"
+    type="password"
+    autocomplete="current-password"
+>
+
+</div>
+
+<button
+    class="primary login-button"
+    id="loginButton"
+>
+Entrar
+</button>
+
+</div>
+
+<div
+    id="loginError"
+    class="error"
+></div>
+
+</div>
+
+</div>
+
+</div>
+
+
+<div
+    id="appView"
+    class="hidden"
+>
+
+<header>
+
+<div class="header-inner">
+
+<div>
+
+<h1>📄 ScanServer</h1>
+
+<div class="subtitle">
+Escáner ADF local
+</div>
+
+</div>
+
+<div class="userbox">
+
+<div id="currentUser"></div>
+
+<button
+    class="logout"
+    id="logoutButton"
+>
+Salir
+</button>
+
+</div>
+
+</div>
+
+</header>
+
+
+<div class="container">
+
+
+<div class="card">
+
+<h2>Nuevo documento</h2>
+
+
+<div class="grid">
+
+
+<div class="field full">
+
+<label>
+Nombre del documento
+</label>
+
+<input
+    id="documentName"
+    placeholder=""
+>
+
+<div class="help">
+Si se deja vacío se utilizará
+DD-MM-YYYY_HH-MM.pdf
+</div>
+
+</div>
+
+
+<div class="field full">
+
+<label>
+Guardar en
+</label>
+
+<select id="folder"></select>
+
+</div>
+
+
+<div class="field">
+
+<label>
+Tipo
+</label>
+
+<select id="mode">
+
+<option
+    value="Gray"
+    selected
+>
+Escala de grises
+</option>
+
+<option value="Color">
+Color
+</option>
+
+</select>
+
+</div>
+
+
+<div class="field">
+
+<label>
+Calidad
+</label>
+
+<select id="dpi">
+
+<option value="200">
+Rápida · 200 dpi
+</option>
+
+<option
+    value="300"
+    selected
+>
+Normal · 300 dpi
+</option>
+
+<option value="600">
+Alta · 600 dpi
+</option>
+
+</select>
+
+</div>
+
+</div>
+
+
+<div class="ocr-row">
+
+<input
+    id="ocr"
+    type="checkbox"
+    checked
+>
+
+<div>
+
+<strong>
+Reconocimiento OCR
+</strong>
+
+<div class="help">
+Permite buscar y copiar texto.
+</div>
+
+</div>
+
+</div>
+
+
+<button
+    id="scanButton"
+    class="primary scan-button"
+
+>
+📄 Iniciar escaneo
+</button>
+
+
+<div class="folder-create">
+
+<strong>
+📁 Crear carpeta
+</strong>
+
+<div
+    class="folder-create-grid"
+    style="margin-top:10px"
+>
+
+<div class="field">
+
+<label>
+Dentro de
+</label>
+
+<select id="folderParent"></select>
+
+</div>
+
+<div class="field">
+
+<label>
+Nombre
+</label>
+
+<input
+    id="newFolderName"
+    placeholder="Ej. Facturas"
+>
+
+</div>
+
+<button
+    class="secondary"
+    id="createFolderButton"
+>
+Crear
+</button>
+
+</div>
+
+</div>
+
+
+<div class="status-box">
+
+<div
+    id="statusTitle"
+    class="status-title"
+>
+Preparado
+</div>
+
+<div
+    id="statusMessage"
+    class="status-message"
+>
+Coloca los documentos en el ADF.
+</div>
+
+<div
+    id="statusFile"
+    class="status-file"
+></div>
+
+<div class="progress-track">
+
+<div
+    id="progressBar"
+    class="progress-bar"
+></div>
+
+</div>
+
+<div class="progress-info">
+
+<span id="progressText">
+0 %
+</span>
+
+<span id="eta"></span>
+
+</div>
+
+
+<div
+    id="continueBox"
+    class="continue-box"
+>
+
+<strong>
+El alimentador está vacío
+</strong>
+
+<div class="help">
+Puedes añadir más hojas al mismo
+documento o finalizarlo.
+</div>
+
+<div
+    id="pageTotal"
+    class="page-total"
+>
+0 páginas
+</div>
+
+<div class="continue-buttons">
+
+<button
+    id="addButton"
+    class="primary"
+
+>
+➕ He añadido más hojas
+</button>
+
+<button
+    id="finishButton"
+    class="success"
+
+>
+✅ Finalizar documento
+</button>
+
+</div>
+
+<button
+    style="width:100%;margin-top:10px"
+    class="danger"
+    id="cancelButton"
+>
+Cancelar documento
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+
+<div class="card">
+
+<h2>Mis documentos</h2>
+
+<div id="documents">
+Cargando…
+</div>
+
+</div>
+
+
+<div
+    id="adminCard"
+    class="card hidden"
+>
+
+<h2>⚙ Administración de usuarios</h2>
+
+
+<div class="admin-create">
+
+<div class="grid">
+
+<div class="field">
+
+<label>Usuario</label>
+
+<input
+    id="adminUsername"
+    placeholder="usuario_ejemplo"
+>
+
+</div>
+
+<div class="field">
+
+<label>Nombre</label>
+
+<input
+    id="adminDisplayName"
+    placeholder="Nombre de ejemplo"
+>
+
+</div>
+
+<div class="field">
+
+<label>Contraseña inicial</label>
+
+<input
+    id="adminPassword"
+    type="password"
+    placeholder="Mínimo 12 caracteres"
+>
+
+</div>
+
+<div class="field">
+
+<label>Tipo</label>
+
+<select id="adminIsAdmin">
+
+<option value="false">
+Usuario
+</option>
+
+<option value="true">
+Administrador
+</option>
+
+</select>
+
+</div>
+
+</div>
+
+<button
+    class="primary"
+    style="margin-top:14px"
+    id="createUserButton"
+>
+➕ Añadir usuario
+</button>
+
+</div>
+
+
+<div id="usersList"></div>
+
+</div>
+
+
+</div>
+
+</div>
+
+
+<script src="/static/app.js?v=20261126_020328" defer></script>
+
+</body>
+
+</html>
