@@ -1,0 +1,33 @@
+# Never publish user material or live runtime state
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.pem
+*.key
+*.crt
+*.log
+*.bak*
+*.tar.gz
+*.zip
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+data/
+backups/
+sessions/
+scans/
+*.swp
+.DS_Store
+# Only intentionally anonymized demo screenshots are allowed
+!docs/screenshots/
+!docs/screenshots/*.png
