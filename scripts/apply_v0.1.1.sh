@@ -25,6 +25,25 @@ declare -A BLOBS=(
   ['web/static/index.html']='776e957efe2f4c623b76b76b8f2520341e03c18d'
 )
 
+# Versiones permitidas de origen: snapshot REAL de LXC y fuente pública v0.1.0.
+# No sustituir cambios locales posteriores sin una revisión explícita.
+declare -A ORIGINAL_BLOBS=(
+  ['web/app.py']='af27c7c78092b609dd6284941447f6224af2bab3'
+  ['web/static/app.js']='5d9e6b549eb157d211b42f5df49ac3fd310ee1ed'
+  ['web/static/index.html']='7f3e2e311de80ae3587c41a1bb8b5896a1d759a2'
+)
+declare -A BASELINE_BLOBS=(
+  ['web/app.py']='b7216749f8489ee08a5a250b515705b2647b5ded'
+  ['web/static/app.js']='3d5f62d843a80cf261038a677289d2d011195c28'
+  ['web/static/index.html']='0cbf49856a39f618f311da2fcd988d14cfd85cbb'
+)
+
+blob_sha() {
+  local file="$1" size
+  size=$(wc -c <"$file")
+  { printf 'blob %s\0' "$size"; cat "$file"; } | sha1sum | awk '{print $1}'
+}
+
 usage() {
   cat <<'HELP'
 Uso (como root):
@@ -53,7 +72,7 @@ while (( $# )); do
 done
 
 (( EUID == 0 )) || die 'Ejecuta como root dentro del LXC.'
-for command in systemctl python3 tar awk sha1sum curl flock pgrep find tr grep wc cp chmod chown mv; do
+for command in systemctl python3 tar awk sha1sum curl flock pgrep find tr grep wc cp chmod chown mv cat sed; do
   command -v "$command" >/dev/null || die "Falta el comando $command"
 done
 exec 9>/run/lock/scanserver-v011-deploy.lock
@@ -92,6 +111,12 @@ check_env SCANSERVER_SECRET 32
 
 for rel in "${FILES[@]}"; do
   [[ -f "$APP_ROOT/$rel" && ! -L "$APP_ROOT/$rel" ]] || die "Falta $APP_ROOT/$rel o es un enlace simbólico."
+  original_sha=$(blob_sha "$APP_ROOT/$rel")
+  if [[ "$original_sha" != "${ORIGINAL_BLOBS[$rel]}" && \
+        "$original_sha" != "${BASELINE_BLOBS[$rel]}" && \
+        "$original_sha" != "${BLOBS[$rel]}" ]]; then
+    die "El código local $rel ha cambiado desde la auditoría. No se sobrescribirá. SHA actual: $original_sha"
+  fi
 done
 [[ -d "$SESSIONS" ]] || die "No encuentro $SESSIONS. Revisar instalación antes de modificar."
 
@@ -150,8 +175,7 @@ prefix=${first%%/*}
 mkdir -p "$TMPDIR_PATCH/stage/web/static"
 for rel in "${FILES[@]}"; do
   tar -xzOf "$ARCHIVE" "$prefix/$rel" >"$TMPDIR_PATCH/stage/$rel" || die "Falta $rel en la descarga"
-  size=$(wc -c <"$TMPDIR_PATCH/stage/$rel")
-  actual=$({ printf 'blob %s\0' "$size"; cat "$TMPDIR_PATCH/stage/$rel"; } | sha1sum | awk '{print $1}')
+  actual=$(blob_sha "$TMPDIR_PATCH/stage/$rel")
   [[ "$actual" == "${BLOBS[$rel]}" ]] || die "Integridad incorrecta: $rel (el parche no se aplicará)."
 done
 python3 -m py_compile "$TMPDIR_PATCH/stage/web/app.py" || die 'Sintaxis Python inválida'
